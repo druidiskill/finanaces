@@ -85,23 +85,23 @@ def is_allowed(user_id: int) -> bool:
 
 def build_main_kb():
     kb = InlineKeyboardBuilder()
-    kb.button(text="Добавить доход", callback_data="add_income")
-    kb.button(text="Добавить расход", callback_data="add_expense")
-    kb.button(text="Сводка", callback_data="summary")
+    kb.button(text="➕💰 Добавить доход", callback_data="add_income")
+    kb.button(text="➖💸 Добавить расход", callback_data="add_expense")
+    kb.button(text="📊 Сводка", callback_data="summary")
     kb.adjust(1)
     return kb.as_markup()
 
 
 def build_cancel_kb():
     kb = InlineKeyboardBuilder()
-    kb.button(text="Отмена", callback_data="cancel")
+    kb.button(text="❌ Отмена", callback_data="cancel")
     return kb.as_markup()
 
 
 def build_comment_kb():
     kb = InlineKeyboardBuilder()
-    kb.button(text="Без комментариев", callback_data="comment_skip")
-    kb.button(text="Отмена", callback_data="cancel")
+    kb.button(text="🚫 Без комментариев", callback_data="comment_skip")
+    kb.button(text="❌ Отмена", callback_data="cancel")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -109,21 +109,13 @@ def build_comment_kb():
 def build_category_kb(categories: list[str], add_label: str, show_done: bool):
     kb = InlineKeyboardBuilder()
     for idx, category in enumerate(categories):
-        kb.button(text=category, callback_data=f"cat_idx:{idx}")
+        kb.button(text=f"📁 {category}", callback_data=f"cat_idx:{idx}")
     kb.button(text=add_label, callback_data="cat_add")
     if show_done:
-        kb.button(text="Готово", callback_data="cat_done")
-    kb.button(text="Отмена", callback_data="cancel")
+        kb.button(text="✅ Готово", callback_data="cat_done")
+    kb.button(text="❌ Отмена", callback_data="cancel")
     kb.adjust(1)
     return kb.as_markup()
-
-
-def normalize_kind(kind: str) -> str:
-    if kind == "income":
-        return "Доход"
-    if kind == "expense":
-        return "Расход"
-    return kind
 
 
 async def load_categories_from_sheet(kind: str) -> list[str]:
@@ -185,6 +177,14 @@ def get_next_level(categories: list[str], prefix: list[str]) -> list[str]:
     return options
 
 
+def normalize_kind(kind: str) -> str:
+    if kind == "income":
+        return "Доход"
+    if kind == "expense":
+        return "Расход"
+    return kind
+
+
 def parse_amount(text: str) -> Decimal:
     normalized = text.strip().replace(" ", "").replace(",", ".")
     try:
@@ -212,9 +212,9 @@ def render_amount(amount: Decimal) -> str:
 async def start(message: Message):
     if not is_allowed(message.from_user.id):
         print(message.chat.id)
-        await message.answer("Доступ запрещен.")
+        await message.answer("⛔ Доступ запрещен.")
         return
-    await message.answer("Выберите действие:", reply_markup=build_main_kb())
+    await message.answer("🔘 Выберите действие:", reply_markup=build_main_kb())
 
 
 async def on_start(message: Message):
@@ -223,12 +223,12 @@ async def on_start(message: Message):
 
 async def on_add_income(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("Доступ запрещен.", show_alert=True)
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
         return
     await state.update_data(kind="income")
     await state.set_state(AddFlow.waiting_amount)
     await callback.message.answer(
-        "Введите сумму в формате 1000,00:",
+        "💰 Введите сумму в формате 1000,00:",
         reply_markup=build_cancel_kb(),
     )
     await callback.answer()
@@ -236,12 +236,12 @@ async def on_add_income(callback: CallbackQuery, state: FSMContext):
 
 async def on_add_expense(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("Доступ запрещен.", show_alert=True)
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
         return
     await state.update_data(kind="expense")
     await state.set_state(AddFlow.waiting_amount)
     await callback.message.answer(
-        "Введите сумму в формате 1000,00:",
+        "💸 Введите сумму в формате 1000,00:",
         reply_markup=build_cancel_kb(),
     )
     await callback.answer()
@@ -249,18 +249,18 @@ async def on_add_expense(callback: CallbackQuery, state: FSMContext):
 
 async def on_cancel(callback: CallbackQuery, state: FSMContext):
     await state.clear()
-    await callback.message.answer("Отменено.", reply_markup=build_main_kb())
+    await callback.message.answer("❌ Отменено.", reply_markup=build_main_kb())
     await callback.answer()
 
 
 async def on_amount(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("Доступ запрещен.")
+        await message.answer("⛔ Доступ запрещен.")
         return
     try:
         amount = parse_amount(message.text)
     except ValueError:
-        await message.answer("Не смог распознать сумму. Пример: 1000,00")
+        await message.answer("⚠️ Не смог распознать сумму. Пример: 1000,00")
         return
     await state.update_data(amount=str(amount))
     data = await state.get_data()
@@ -274,19 +274,19 @@ async def on_amount(message: Message, state: FSMContext):
         category_options=options,
     )
     if options:
-        text = "Выберите категорию:"
+        text = "📂 Выберите категорию:"
     else:
-        text = "Список категорий пуст. Добавьте новую."
+        text = "📂 Список категорий пуст. Добавьте новую."
     await state.set_state(AddFlow.waiting_category_select)
     await message.answer(
         text,
-        reply_markup=build_category_kb(options, "Добавить категорию", False),
+        reply_markup=build_category_kb(options, "➕ Добавить категорию", False),
     )
 
 
 async def on_category_select(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("Доступ запрещен.", show_alert=True)
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     options = data.get("category_options", [])
@@ -295,10 +295,10 @@ async def on_category_select(callback: CallbackQuery, state: FSMContext):
     try:
         idx = int(raw.split(":", 1)[1])
     except (IndexError, ValueError):
-        await callback.answer("Некорректная категория.", show_alert=True)
+        await callback.answer("⚠️ Некорректная категория.", show_alert=True)
         return
     if idx < 0 or idx >= len(options):
-        await callback.answer("Категория не найдена.", show_alert=True)
+        await callback.answer("⚠️ Категория не найдена.", show_alert=True)
         return
     prefix = prefix + [options[idx]]
     category_paths = data.get("category_paths", [])
@@ -308,29 +308,29 @@ async def on_category_select(callback: CallbackQuery, state: FSMContext):
         category_options=next_options,
     )
     if next_options:
-        text = "Выберите подкатегорию или нажмите Готово:"
+        text = "🧩 Выберите подкатегорию или нажмите Готово:"
     else:
-        text = "Подкатегорий нет. Добавьте подкатегорию или нажмите Готово:"
+        text = "🧩 Подкатегорий нет. Добавьте подкатегорию или нажмите Готово:"
     await callback.message.answer(
         text,
-        reply_markup=build_category_kb(next_options, "Добавить подкатегорию", True),
+        reply_markup=build_category_kb(next_options, "➕ Добавить подкатегорию", True),
     )
     await callback.answer()
 
 
 async def on_category_done(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("Доступ запрещен.", show_alert=True)
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     prefix = data.get("category_prefix", [])
     if not prefix:
-        await callback.answer("Сначала выберите категорию.", show_alert=True)
+        await callback.answer("⚠️ Сначала выберите категорию.", show_alert=True)
         return
     await state.update_data(category=format_category_path(prefix))
     await state.set_state(AddFlow.waiting_comment)
     await callback.message.answer(
-        "Комментарий:",
+        "💬 Комментарий:",
         reply_markup=build_comment_kb(),
     )
     await callback.answer()
@@ -338,14 +338,14 @@ async def on_category_done(callback: CallbackQuery, state: FSMContext):
 
 async def on_category_add(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("Доступ запрещен.", show_alert=True)
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     prefix = data.get("category_prefix", [])
     if prefix:
-        prompt = f"Введите подкатегорию для '{format_category_path(prefix)}':"
+        prompt = f"➕ Введите подкатегорию для '{format_category_path(prefix)}':"
     else:
-        prompt = "Введите новую категорию:"
+        prompt = "➕ Введите новую категорию:"
     await state.set_state(AddFlow.waiting_category_add)
     await callback.message.answer(prompt, reply_markup=build_cancel_kb())
     await callback.answer()
@@ -353,17 +353,16 @@ async def on_category_add(callback: CallbackQuery, state: FSMContext):
 
 async def on_category_add_text(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("Доступ запрещен.")
+        await message.answer("⛔ Доступ запрещен.")
         return
     data = await state.get_data()
     prefix = data.get("category_prefix", [])
     raw = message.text.strip()
     parts = split_category_path(raw)
     if not parts:
-        await message.answer("Категория не должна быть пустой.")
+        await message.answer("⚠️ Категория не должна быть пустой.")
         return
     prefix = prefix + parts
-    data = await state.get_data()
     category_paths = data.get("category_paths", [])
     next_options = get_next_level(category_paths, prefix)
     await state.update_data(
@@ -371,13 +370,13 @@ async def on_category_add_text(message: Message, state: FSMContext):
         category_options=next_options,
     )
     if next_options:
-        text = "Выберите подкатегорию или нажмите Готово:"
+        text = "🧩 Выберите подкатегорию или нажмите Готово:"
     else:
-        text = "Подкатегорий нет. Добавьте подкатегорию или нажмите Готово:"
+        text = "🧩 Подкатегорий нет. Добавьте подкатегорию или нажмите Готово:"
     await state.set_state(AddFlow.waiting_category_select)
     await message.answer(
         text,
-        reply_markup=build_category_kb(next_options, "Добавить подкатегорию", True),
+        reply_markup=build_category_kb(next_options, "➕ Добавить подкатегорию", True),
     )
 
 
@@ -400,15 +399,15 @@ async def save_entry(state: FSMContext, user_id: int, comment: str, send):
         await append_row(row)
     except Exception:
         logging.exception("Failed to append row")
-        await send("Ошибка записи в таблицу. Проверьте доступы.")
+        await send("❗ Ошибка записи в таблицу. Проверьте доступы.")
         return
     await state.clear()
-    await send("Записано.", reply_markup=build_main_kb())
+    await send("✅ Записано.", reply_markup=build_main_kb())
 
 
 async def on_comment(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("Доступ запрещен.")
+        await message.answer("⛔ Доступ запрещен.")
         return
     comment = message.text.strip()
     await save_entry(state, message.from_user.id, comment, message.answer)
@@ -416,7 +415,7 @@ async def on_comment(message: Message, state: FSMContext):
 
 async def on_comment_skip(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("Доступ запрещен.", show_alert=True)
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
         return
     await save_entry(state, callback.from_user.id, "", callback.message.answer)
     await callback.answer()
@@ -424,9 +423,9 @@ async def on_comment_skip(callback: CallbackQuery, state: FSMContext):
 
 async def on_summary(callback: CallbackQuery):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("Доступ запрещен.", show_alert=True)
+        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
         return
-    await callback.message.answer("Сводка в разработке.")
+    await callback.message.answer("🧾 Сводка в разработке.")
     await callback.answer()
 
 
