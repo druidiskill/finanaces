@@ -1,6 +1,7 @@
-import asyncio
+﻿import asyncio
 import logging
 import os
+import time
 from datetime import datetime
 from decimal import Decimal, InvalidOperation
 
@@ -29,6 +30,8 @@ for pair in os.getenv("USER_NAME_MAP", "").split(","):
     user_id, name = pair.split(":", 1)
     user_id = user_id.strip()
     name = name.strip()
+    if len(name) >= 2 and name[0] == name[-1] and name[0] in {'"', "'"}:
+        name = name[1:-1].strip()
     if not user_id or not name:
         continue
     try:
@@ -47,7 +50,8 @@ SCOPES = [
 
 class AddFlow(StatesGroup):
     waiting_amount = State()
-    waiting_category = State()
+    waiting_category_select = State()
+    waiting_category_add = State()
     waiting_comment = State()
 
 
@@ -94,6 +98,93 @@ def build_cancel_kb():
     return kb.as_markup()
 
 
+def build_comment_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="Без комментариев", callback_data="comment_skip")
+    kb.button(text="Отмена", callback_data="cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def build_category_kb(categories: list[str], add_label: str, show_done: bool):
+    kb = InlineKeyboardBuilder()
+    for idx, category in enumerate(categories):
+        kb.button(text=category, callback_data=f"cat_idx:{idx}")
+    kb.button(text=add_label, callback_data="cat_add")
+    if show_done:
+        kb.button(text="Готово", callback_data="cat_done")
+    kb.button(text="Отмена", callback_data="cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def normalize_kind(kind: str) -> str:
+    if kind == "income":
+        return "Доход"
+    if kind == "expense":
+        return "Расход"
+    return kind
+
+
+async def load_categories_from_sheet(kind: str) -> list[str]:
+    try:
+        client = await agcm.authorize()
+        sheet = await client.open_by_key(GOOGLE_SHEET_ID)
+        worksheet = await sheet.worksheet(GOOGLE_WORKSHEET_NAME)
+        kind_values = await worksheet.col_values(2)
+        category_values = await worksheet.col_values(4)
+    except Exception:
+        logging.exception("Failed to load categories from sheet")
+        return []
+    categories = []
+    seen = set()
+    target_kind = normalize_kind(kind)
+    for row_kind, row_category in zip(kind_values, category_values):
+        if row_category is None:
+            continue
+        item = str(row_category).strip()
+        if not item:
+            continue
+        kind_item = str(row_kind).strip()
+        if kind_item == "kind" or kind_item == "тип":
+            continue
+        if target_kind and kind_item != target_kind:
+            continue
+        lower = item.lower()
+        if lower in {"category", "category_path", "категория", "категория_path"}:
+            continue
+        if item in seen:
+            continue
+        seen.add(item)
+        categories.append(item)
+    return categories
+
+
+def split_category_path(path_value: str) -> list[str]:
+    return [part.strip() for part in str(path_value).split(">") if part.strip()]
+
+
+def format_category_path(parts: list[str]) -> str:
+    return " > ".join(parts)
+
+
+def get_next_level(categories: list[str], prefix: list[str]) -> list[str]:
+    options = []
+    seen = set()
+    for path_value in categories:
+        parts = split_category_path(path_value)
+        if len(parts) <= len(prefix):
+            continue
+        if parts[: len(prefix)] != prefix:
+            continue
+        next_part = parts[len(prefix)]
+        if next_part in seen:
+            continue
+        seen.add(next_part)
+        options.append(next_part)
+    return options
+
+
 def parse_amount(text: str) -> Decimal:
     normalized = text.strip().replace(" ", "").replace(",", ".")
     try:
@@ -107,15 +198,20 @@ async def append_row(row: list[str]):
     client = await agcm.authorize()
     sheet = await client.open_by_key(GOOGLE_SHEET_ID)
     worksheet = await sheet.worksheet(GOOGLE_WORKSHEET_NAME)
-    await worksheet.append_row(row, value_input_option="USER_ENTERED")
+    await worksheet.append_row(
+        row,
+        value_input_option="USER_ENTERED",
+        table_range="A1",
+    )
 
 
 def render_amount(amount: Decimal) -> str:
-    return f"{amount:.2f}"
+    return f"{amount:.2f}".replace(".", ",")
 
 
 async def start(message: Message):
     if not is_allowed(message.from_user.id):
+        print(message.chat.id)
         await message.answer("Доступ запрещен.")
         return
     await message.answer("Выберите действие:", reply_markup=build_main_kb())
@@ -167,41 +263,131 @@ async def on_amount(message: Message, state: FSMContext):
         await message.answer("Не смог распознать сумму. Пример: 1000,00")
         return
     await state.update_data(amount=str(amount))
-    await state.set_state(AddFlow.waiting_category)
+    data = await state.get_data()
+    kind = data.get("kind", "")
+    category_paths = await load_categories_from_sheet(kind)
+    prefix = []
+    options = get_next_level(category_paths, prefix)
+    await state.update_data(
+        category_paths=category_paths,
+        category_prefix=prefix,
+        category_options=options,
+    )
+    if options:
+        text = "Выберите категорию:"
+    else:
+        text = "Список категорий пуст. Добавьте новую."
+    await state.set_state(AddFlow.waiting_category_select)
     await message.answer(
-        "Категория. Можно указать уровень через '>' (например: Дом > Коммунальные):",
-        reply_markup=build_cancel_kb(),
+        text,
+        reply_markup=build_category_kb(options, "Добавить категорию", False),
     )
 
-async def on_category(message: Message, state: FSMContext):
-    if not is_allowed(message.from_user.id):
-        await message.answer("Доступ запрещен.")
+
+async def on_category_select(callback: CallbackQuery, state: FSMContext):
+    if not is_allowed(callback.from_user.id):
+        await callback.answer("Доступ запрещен.", show_alert=True)
         return
-    category = message.text.strip()
-    if not category:
-        await message.answer("Категория не должна быть пустой.")
+    data = await state.get_data()
+    options = data.get("category_options", [])
+    prefix = data.get("category_prefix", [])
+    raw = callback.data or ""
+    try:
+        idx = int(raw.split(":", 1)[1])
+    except (IndexError, ValueError):
+        await callback.answer("Некорректная категория.", show_alert=True)
         return
-    await state.update_data(category=category)
+    if idx < 0 or idx >= len(options):
+        await callback.answer("Категория не найдена.", show_alert=True)
+        return
+    prefix = prefix + [options[idx]]
+    category_paths = data.get("category_paths", [])
+    next_options = get_next_level(category_paths, prefix)
+    await state.update_data(
+        category_prefix=prefix,
+        category_options=next_options,
+    )
+    if next_options:
+        text = "Выберите подкатегорию или нажмите Готово:"
+    else:
+        text = "Подкатегорий нет. Добавьте подкатегорию или нажмите Готово:"
+    await callback.message.answer(
+        text,
+        reply_markup=build_category_kb(next_options, "Добавить подкатегорию", True),
+    )
+    await callback.answer()
+
+
+async def on_category_done(callback: CallbackQuery, state: FSMContext):
+    if not is_allowed(callback.from_user.id):
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+    data = await state.get_data()
+    prefix = data.get("category_prefix", [])
+    if not prefix:
+        await callback.answer("Сначала выберите категорию.", show_alert=True)
+        return
+    await state.update_data(category=format_category_path(prefix))
     await state.set_state(AddFlow.waiting_comment)
-    await message.answer(
-        "Комментарий (или '-' чтобы пропустить):",
-        reply_markup=build_cancel_kb(),
+    await callback.message.answer(
+        "Комментарий:",
+        reply_markup=build_comment_kb(),
     )
+    await callback.answer()
 
 
-async def on_comment(message: Message, state: FSMContext):
+async def on_category_add(callback: CallbackQuery, state: FSMContext):
+    if not is_allowed(callback.from_user.id):
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+    data = await state.get_data()
+    prefix = data.get("category_prefix", [])
+    if prefix:
+        prompt = f"Введите подкатегорию для '{format_category_path(prefix)}':"
+    else:
+        prompt = "Введите новую категорию:"
+    await state.set_state(AddFlow.waiting_category_add)
+    await callback.message.answer(prompt, reply_markup=build_cancel_kb())
+    await callback.answer()
+
+
+async def on_category_add_text(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
         await message.answer("Доступ запрещен.")
         return
     data = await state.get_data()
-    kind = data.get("kind", "unknown")
+    prefix = data.get("category_prefix", [])
+    raw = message.text.strip()
+    parts = split_category_path(raw)
+    if not parts:
+        await message.answer("Категория не должна быть пустой.")
+        return
+    prefix = prefix + parts
+    data = await state.get_data()
+    category_paths = data.get("category_paths", [])
+    next_options = get_next_level(category_paths, prefix)
+    await state.update_data(
+        category_prefix=prefix,
+        category_options=next_options,
+    )
+    if next_options:
+        text = "Выберите подкатегорию или нажмите Готово:"
+    else:
+        text = "Подкатегорий нет. Добавьте подкатегорию или нажмите Готово:"
+    await state.set_state(AddFlow.waiting_category_select)
+    await message.answer(
+        text,
+        reply_markup=build_category_kb(next_options, "Добавить подкатегорию", True),
+    )
+
+
+async def save_entry(state: FSMContext, user_id: int, comment: str, send):
+    data = await state.get_data()
+    kind = normalize_kind(data.get("kind", "unknown"))
     amount = data.get("amount", "0")
     category = data.get("category", "")
-    comment = message.text.strip()
-    if comment == "-":
-        comment = ""
-    timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    user_name = USER_NAME_MAP.get(message.from_user.id, "unknown")
+    timestamp = datetime.now().strftime("%d.%m.%Y")
+    user_name = USER_NAME_MAP.get(user_id, "unknown")
     row = [
         timestamp,
         kind,
@@ -214,10 +400,26 @@ async def on_comment(message: Message, state: FSMContext):
         await append_row(row)
     except Exception:
         logging.exception("Failed to append row")
-        await message.answer("Ошибка записи в таблицу. Проверьте доступы.")
+        await send("Ошибка записи в таблицу. Проверьте доступы.")
         return
     await state.clear()
-    await message.answer("Записано.", reply_markup=build_main_kb())
+    await send("Записано.", reply_markup=build_main_kb())
+
+
+async def on_comment(message: Message, state: FSMContext):
+    if not is_allowed(message.from_user.id):
+        await message.answer("Доступ запрещен.")
+        return
+    comment = message.text.strip()
+    await save_entry(state, message.from_user.id, comment, message.answer)
+
+
+async def on_comment_skip(callback: CallbackQuery, state: FSMContext):
+    if not is_allowed(callback.from_user.id):
+        await callback.answer("Доступ запрещен.", show_alert=True)
+        return
+    await save_entry(state, callback.from_user.id, "", callback.message.answer)
+    await callback.answer()
 
 
 async def on_summary(callback: CallbackQuery):
@@ -239,8 +441,12 @@ async def main():
     dp.callback_query.register(on_add_expense, F.data == "add_expense")
     dp.callback_query.register(on_cancel, F.data == "cancel")
     dp.callback_query.register(on_summary, F.data == "summary")
+    dp.callback_query.register(on_category_select, F.data.startswith("cat_idx:"))
+    dp.callback_query.register(on_category_add, F.data == "cat_add")
+    dp.callback_query.register(on_category_done, F.data == "cat_done")
+    dp.callback_query.register(on_comment_skip, F.data == "comment_skip")
     dp.message.register(on_amount, AddFlow.waiting_amount)
-    dp.message.register(on_category, AddFlow.waiting_category)
+    dp.message.register(on_category_add_text, AddFlow.waiting_category_add)
     dp.message.register(on_comment, AddFlow.waiting_comment)
     dp.message.register(start)
 
@@ -249,3 +455,4 @@ async def main():
 
 if __name__ == "__main__":
     asyncio.run(main())
+    time.sleep(30)
