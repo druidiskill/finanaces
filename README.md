@@ -6,8 +6,9 @@ Telegram-бот для учета доходов/расходов с запис�
 1) timestamp
 2) kind (income/expense)
 3) amount
-4) comment
-5) user_id
+4) category_path
+5) comment
+6) user_id
 
 Подготовка:
 1) Создать сервисный аккаунт Google и выдать доступ к таблице.

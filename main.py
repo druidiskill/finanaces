@@ -22,6 +22,19 @@ ALLOWED_USER_IDS = {
     for user_id in os.getenv("ALLOWED_USER_IDS", "").split(",")
     if user_id.strip()
 }
+USER_NAME_MAP = {}
+for pair in os.getenv("USER_NAME_MAP", "").split(","):
+    if ":" not in pair:
+        continue
+    user_id, name = pair.split(":", 1)
+    user_id = user_id.strip()
+    name = name.strip()
+    if not user_id or not name:
+        continue
+    try:
+        USER_NAME_MAP[int(user_id)] = name
+    except ValueError:
+        continue
 GOOGLE_SHEET_ID = os.getenv("GOOGLE_SHEET_ID", "").strip()
 GOOGLE_WORKSHEET_NAME = os.getenv("GOOGLE_WORKSHEET_NAME", "Sheet1").strip()
 GOOGLE_SERVICE_ACCOUNT_FILE = os.getenv("GOOGLE_SERVICE_ACCOUNT_FILE", "").strip()
@@ -34,6 +47,7 @@ SCOPES = [
 
 class AddFlow(StatesGroup):
     waiting_amount = State()
+    waiting_category = State()
     waiting_comment = State()
 
 
@@ -153,6 +167,21 @@ async def on_amount(message: Message, state: FSMContext):
         await message.answer("Не смог распознать сумму. Пример: 1000,00")
         return
     await state.update_data(amount=str(amount))
+    await state.set_state(AddFlow.waiting_category)
+    await message.answer(
+        "Категория. Можно указать уровень через '>' (например: Дом > Коммунальные):",
+        reply_markup=build_cancel_kb(),
+    )
+
+async def on_category(message: Message, state: FSMContext):
+    if not is_allowed(message.from_user.id):
+        await message.answer("Доступ запрещен.")
+        return
+    category = message.text.strip()
+    if not category:
+        await message.answer("Категория не должна быть пустой.")
+        return
+    await state.update_data(category=category)
     await state.set_state(AddFlow.waiting_comment)
     await message.answer(
         "Комментарий (или '-' чтобы пропустить):",
@@ -167,16 +196,19 @@ async def on_comment(message: Message, state: FSMContext):
     data = await state.get_data()
     kind = data.get("kind", "unknown")
     amount = data.get("amount", "0")
+    category = data.get("category", "")
     comment = message.text.strip()
     if comment == "-":
         comment = ""
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    user_name = USER_NAME_MAP.get(message.from_user.id, "unknown")
     row = [
         timestamp,
         kind,
         render_amount(Decimal(amount)),
+        category,
         comment,
-        str(message.from_user.id),
+        user_name,
     ]
     try:
         await append_row(row)
@@ -208,6 +240,7 @@ async def main():
     dp.callback_query.register(on_cancel, F.data == "cancel")
     dp.callback_query.register(on_summary, F.data == "summary")
     dp.message.register(on_amount, AddFlow.waiting_amount)
+    dp.message.register(on_category, AddFlow.waiting_category)
     dp.message.register(on_comment, AddFlow.waiting_comment)
     dp.message.register(start)
 
