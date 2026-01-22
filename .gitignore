@@ -2,3 +2,4 @@
 .env
 google.json
 scripts/
+__pycache__/
