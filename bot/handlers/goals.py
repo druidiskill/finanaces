@@ -454,6 +454,69 @@ async def on_goals_comment_text(message: Message, state: FSMContext):
     await delete_user_message(message)
 
 
+async def on_goals_due_edit_current(callback: CallbackQuery, state: FSMContext):
+    if not is_allowed(callback.from_user.id):
+        await callback.answer("??? ???????????? ????????????????.", show_alert=True)
+        return
+    data = await state.get_data()
+    goal_id = data.get("current_goal_id")
+    if not goal_id:
+        await callback.answer("?????? ?????????????? ???????????????? ????????.", show_alert=True)
+        return
+    rows = await load_goals_rows()
+    index = index_goals(rows)
+    if goal_id not in index:
+        await callback.answer("?????? ID ???? ????????????.", show_alert=True)
+        return
+    row_idx, row = index[goal_id]
+    current_due = str(row[6]).strip() if len(row) > 6 else ""
+    await state.update_data(goal_row_idx=row_idx, current_goal_id=goal_id)
+    await state.set_state(GoalsFlow.waiting_due_edit)
+    hint = f"??????? ????: {current_due}" if current_due else "???? ?? ?????."
+    await edit_or_answer(
+        callback,
+        f"??? ??????? ????? ???? (??.??.????).
+{hint}",
+        reply_markup=build_cancel_kb(),
+    )
+    await callback.answer()
+
+
+async def on_goals_due_edit_text(message: Message, state: FSMContext):
+    if not is_allowed(message.from_user.id):
+        await message.answer("??? ???????????? ????????????????.")
+        await delete_user_message(message)
+        return
+    due = message.text.strip()
+    if not parse_sheet_date(due):
+        await message.answer("?????? ???????????????? ???????????? ????????. ????????????: 21.01.2026")
+        await delete_user_message(message)
+        return
+    data = await state.get_data()
+    row_idx = data.get("goal_row_idx")
+    current_id = data.get("current_goal_id")
+    if not row_idx:
+        await message.answer("?????? ???? ???????????? ??????????????.")
+        await delete_user_message(message)
+        return
+    today = datetime.now().strftime("%d.%m.%Y")
+    try:
+        worksheet = await get_goals_ws()
+        await worksheet.update_cell(row_idx, 7, due)
+        await worksheet.update_cell(row_idx, 9, today)
+    except Exception:
+        logging.exception("Failed to update due date")
+        await message.answer("??? ???????????? ???????????????????? ????????.")
+        await delete_user_message(message)
+        return
+    await state.clear()
+    if current_id:
+        await show_goals_node_from_message(message, state, current_id)
+    else:
+        await show_goals_root_from_message(message, state)
+    await delete_user_message(message)
+
+
 async def on_goals_schedule_current(callback: CallbackQuery):
     if not is_allowed(callback.from_user.id):
         await callback.answer("⛔ Доступ запрещен.", show_alert=True)
@@ -524,6 +587,7 @@ def register_goals(dp):
     dp.callback_query.register(on_goals_status_set, F.data.startswith("goals_status_set:"))
     dp.callback_query.register(on_goals_delegate_current, F.data == "goals_delegate_current")
     dp.callback_query.register(on_goals_comment_current, F.data == "goals_comment_current")
+    dp.callback_query.register(on_goals_due_edit_current, F.data == "goals_due_edit_current")
     dp.callback_query.register(on_goals_schedule_current, F.data == "goals_schedule_current")
     dp.callback_query.register(on_goals_delete_current, F.data == "goals_delete_current")
     dp.message.register(on_goals_add_goal_title, GoalsFlow.waiting_goal_title)
@@ -532,3 +596,4 @@ def register_goals(dp):
     dp.message.register(on_goals_add_step_due, GoalsFlow.waiting_step_due)
     dp.message.register(on_goals_delegate_name, GoalsFlow.waiting_delegate_name)
     dp.message.register(on_goals_comment_text, GoalsFlow.waiting_comment_text)
+    dp.message.register(on_goals_due_edit_text, GoalsFlow.waiting_due_edit)

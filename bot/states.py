@@ -20,5 +20,6 @@ class GoalsFlow(StatesGroup):
     waiting_goal_due = State()
     waiting_step_title = State()
     waiting_step_due = State()
+    waiting_due_edit = State()
     waiting_delegate_name = State()
     waiting_comment_text = State()
