@@ -115,7 +115,7 @@ async def show_goals_node_from_message(message: Message, state: FSMContext, goal
 
 async def on_section_goals(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     await state.clear()
     await show_goals_root_from_callback(callback, state)
@@ -124,7 +124,7 @@ async def on_section_goals(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_open(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     goal_id = (callback.data or "").split(":", 1)[1]
     await show_goals_node_from_callback(callback, state, goal_id)
@@ -133,7 +133,7 @@ async def on_goals_open(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_back(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     parent_id = (callback.data or "").split(":", 1)[1]
     if parent_id:
@@ -145,7 +145,7 @@ async def on_goals_back(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_add_goal(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     await state.set_state(GoalsFlow.waiting_goal_title)
     await edit_or_answer(callback, "➕🎯 Введите название цели:", reply_markup=build_cancel_kb())
@@ -154,7 +154,7 @@ async def on_goals_add_goal(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_add_goal_title(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("⛔ Доступ запрещен.")
+        await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
         return
     title = message.text.strip()
@@ -170,7 +170,7 @@ async def on_goals_add_goal_title(message: Message, state: FSMContext):
 
 async def on_goals_add_goal_due(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("⛔ Доступ запрещен.")
+        await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
         return
     due = message.text.strip()
@@ -214,7 +214,7 @@ async def on_goals_add_goal_due(message: Message, state: FSMContext):
 
 async def on_goals_add_step_current(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     parent_id = data.get("current_goal_id")
@@ -232,7 +232,7 @@ async def on_goals_add_step_current(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_add_step_title(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("⛔ Доступ запрещен.")
+        await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
         return
     title = message.text.strip()
@@ -248,7 +248,7 @@ async def on_goals_add_step_title(message: Message, state: FSMContext):
 
 async def on_goals_add_step_due(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("⛔ Доступ запрещен.")
+        await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
         return
     due = message.text.strip()
@@ -295,7 +295,7 @@ async def on_goals_add_step_due(message: Message, state: FSMContext):
 
 async def on_goals_status_current(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     goal_id = data.get("current_goal_id")
@@ -315,7 +315,7 @@ async def on_goals_status_current(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_status_set(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     row_idx = data.get("goal_row_idx")
@@ -344,7 +344,7 @@ async def on_goals_status_set(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_delegate_current(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     goal_id = data.get("current_goal_id")
@@ -365,7 +365,7 @@ async def on_goals_delegate_current(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_delegate_name(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("⛔ Доступ запрещен.")
+        await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
         return
     name = message.text.strip()
@@ -396,7 +396,7 @@ async def on_goals_delegate_name(message: Message, state: FSMContext):
 
 async def on_goals_comment_current(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     goal_id = data.get("current_goal_id")
@@ -418,7 +418,7 @@ async def on_goals_comment_current(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_comment_text(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("⛔ Доступ запрещен.")
+        await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
         return
     comment = message.text.strip()
@@ -456,27 +456,26 @@ async def on_goals_comment_text(message: Message, state: FSMContext):
 
 async def on_goals_due_edit_current(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("??? ???????????? ????????????????.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     goal_id = data.get("current_goal_id")
     if not goal_id:
-        await callback.answer("?????? ?????????????? ???????????????? ????????.", show_alert=True)
+        await callback.answer("⚠️ Сначала выберите цель.", show_alert=True)
         return
     rows = await load_goals_rows()
     index = index_goals(rows)
     if goal_id not in index:
-        await callback.answer("?????? ID ???? ????????????.", show_alert=True)
+        await callback.answer("⚠️ ID не найден.", show_alert=True)
         return
     row_idx, row = index[goal_id]
     current_due = str(row[6]).strip() if len(row) > 6 else ""
     await state.update_data(goal_row_idx=row_idx, current_goal_id=goal_id)
     await state.set_state(GoalsFlow.waiting_due_edit)
-    hint = f"??????? ????: {current_due}" if current_due else "???? ?? ?????."
+    hint = f"Текущий срок: {current_due}" if current_due else "Срок не задан."
     await edit_or_answer(
         callback,
-        f"??? ??????? ????? ???? (??.??.????).
-{hint}",
+        f"🗓️ Введите новый срок (ДД.ММ.ГГГГ).\n{hint}",
         reply_markup=build_cancel_kb(),
     )
     await callback.answer()
@@ -484,19 +483,19 @@ async def on_goals_due_edit_current(callback: CallbackQuery, state: FSMContext):
 
 async def on_goals_due_edit_text(message: Message, state: FSMContext):
     if not is_allowed(message.from_user.id):
-        await message.answer("??? ???????????? ????????????????.")
+        await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
         return
     due = message.text.strip()
     if not parse_sheet_date(due):
-        await message.answer("?????? ???????????????? ???????????? ????????. ????????????: 21.01.2026")
+        await message.answer("⚠️ Неверный формат даты. Пример: 21.01.2026")
         await delete_user_message(message)
         return
     data = await state.get_data()
     row_idx = data.get("goal_row_idx")
     current_id = data.get("current_goal_id")
     if not row_idx:
-        await message.answer("?????? ???? ???????????? ??????????????.")
+        await message.answer("⚠️ Не выбран элемент.")
         await delete_user_message(message)
         return
     today = datetime.now().strftime("%d.%m.%Y")
@@ -506,7 +505,7 @@ async def on_goals_due_edit_text(message: Message, state: FSMContext):
         await worksheet.update_cell(row_idx, 9, today)
     except Exception:
         logging.exception("Failed to update due date")
-        await message.answer("??? ???????????? ???????????????????? ????????.")
+        await message.answer("❗ Ошибка обновления срока.")
         await delete_user_message(message)
         return
     await state.clear()
@@ -519,7 +518,7 @@ async def on_goals_due_edit_text(message: Message, state: FSMContext):
 
 async def on_goals_schedule_current(callback: CallbackQuery):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     await edit_or_answer(callback, "🗓️ Перенос в расписание — в разработке.")
     await callback.answer()
@@ -527,7 +526,7 @@ async def on_goals_schedule_current(callback: CallbackQuery):
 
 async def on_goals_delete_current(callback: CallbackQuery, state: FSMContext):
     if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
+        await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
     data = await state.get_data()
     goal_id = data.get("current_goal_id")

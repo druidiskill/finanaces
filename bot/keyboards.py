@@ -87,7 +87,7 @@ def build_goals_children_kb(items: list[dict], parent_id: str, show_add_step: bo
         kb.button(text=item["label"], callback_data=f"goals_open:{item['id']}")
     if show_add_step:
         kb.button(text="➕🧩 Добавить этап", callback_data="goals_add_step_current")
-    kb.button(text="🗓️ ???????? ????", callback_data="goals_due_edit_current")
+    kb.button(text="🗓️ Изменить срок", callback_data="goals_due_edit_current")
     kb.button(text="💬 Комментарий", callback_data="goals_comment_current")
     kb.button(text="🗑️ Удалить", callback_data="goals_delete_current")
     kb.button(text="🔙 Назад", callback_data=f"goals_back:{parent_id}")
@@ -100,7 +100,7 @@ def build_goals_leaf_kb(parent_id: str, status: str):
     kb.button(text="👤 Делегировать", callback_data="goals_delegate_current")
     kb.button(text="🗓️ В расписание", callback_data="goals_schedule_current")
     kb.button(text=f"{status_emoji(status)} Статус", callback_data="goals_status_current")
-    kb.button(text="🗓️ ???????? ????", callback_data="goals_due_edit_current")
+    kb.button(text="🗓️ Изменить срок", callback_data="goals_due_edit_current")
     kb.button(text="💬 Комментарий", callback_data="goals_comment_current")
     kb.button(text="➕🧩 Добавить этап", callback_data="goals_add_step_current")
     kb.button(text="🗑️ Удалить", callback_data="goals_delete_current")

@@ -2,4 +2,5 @@
 .env
 google.json
 scripts/
-__pycache__/
+bot/__pycache__/
+*.pyc
