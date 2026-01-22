@@ -501,8 +501,8 @@ async def on_goals_due_edit_text(message: Message, state: FSMContext):
     today = datetime.now().strftime("%d.%m.%Y")
     try:
         worksheet = await get_goals_ws()
-        await worksheet.update_cell(row_idx, 7, due)
-        await worksheet.update_cell(row_idx, 9, today)
+        await worksheet.update(f"G{row_idx}", [[due]], value_input_option="USER_ENTERED")
+        await worksheet.update(f"I{row_idx}", [[today]], value_input_option="USER_ENTERED")
     except Exception:
         logging.exception("Failed to update due date")
         await message.answer("❗ Ошибка обновления срока.")
