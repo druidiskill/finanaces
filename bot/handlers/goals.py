@@ -23,6 +23,8 @@ from ..sheets import (
     index_goals,
     load_goals_rows,
 )
+from ..config import GOALS_WORKSHEET_NAME
+from ..config import GOALS_WORKSHEET_NAME, GOOGLE_SHEET_ID
 from ..states import GoalsFlow
 from ..utils import (
     format_status_ru,
@@ -114,6 +116,7 @@ async def show_goals_node_from_message(message: Message, state: FSMContext, goal
 
 
 async def on_section_goals(callback: CallbackQuery, state: FSMContext):
+    logger.info("on_section_goals user=%s", callback.from_user.id)
     if not is_allowed(callback.from_user.id):
         await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
@@ -144,6 +147,7 @@ async def on_goals_back(callback: CallbackQuery, state: FSMContext):
 
 
 async def on_goals_add_goal(callback: CallbackQuery, state: FSMContext):
+    logger.info("on_goals_add_goal user=%s", callback.from_user.id)
     if not is_allowed(callback.from_user.id):
         await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
@@ -169,6 +173,7 @@ async def on_goals_add_goal_title(message: Message, state: FSMContext):
 
 
 async def on_goals_add_goal_due(message: Message, state: FSMContext):
+    logger.info("on_goals_add_goal_due user=%s text=%s", message.from_user.id, message.text)
     if not is_allowed(message.from_user.id):
         await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
@@ -207,12 +212,26 @@ async def on_goals_add_goal_due(message: Message, state: FSMContext):
         await message.answer("❗ Ошибка записи цели. Проверьте доступы.")
         await delete_user_message(message)
         return
+    logging.info("Goal appended: id=%s title=%s", goal_id, title)
+    await message.answer(
+        f"✅ Записано в лист «{GOALS_WORKSHEET_NAME}» (ID таблицы: {GOOGLE_SHEET_ID})."
+    )
+    try:
+        rows = await load_goals_rows()
+        logging.info("Goals rows after append: count=%s last=%s", len(rows), rows[-1] if rows else None)
+        if not any(r and str(r[0]).strip() == goal_id for r in rows):
+            await message.answer(
+                f"⚠️ Запись не появилась в листе «{GOALS_WORKSHEET_NAME}». Проверьте права и название листа."
+            )
+    except Exception:
+        logging.exception("Failed to verify goal append")
     await state.clear()
     await show_goals_root_from_message(message, state)
     await delete_user_message(message)
 
 
 async def on_goals_add_step_current(callback: CallbackQuery, state: FSMContext):
+    logger.info("on_goals_add_step_current user=%s", callback.from_user.id)
     if not is_allowed(callback.from_user.id):
         await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
@@ -288,6 +307,19 @@ async def on_goals_add_step_due(message: Message, state: FSMContext):
         await message.answer("❗ Ошибка записи этапа. Проверьте доступы.")
         await delete_user_message(message)
         return
+    logging.info("Step appended: id=%s title=%s parent=%s", step_id, title, parent_id)
+    await message.answer(
+        f"✅ Записано в лист «{GOALS_WORKSHEET_NAME}» (ID таблицы: {GOOGLE_SHEET_ID})."
+    )
+    try:
+        rows = await load_goals_rows()
+        logging.info("Goals rows after step append: count=%s last=%s", len(rows), rows[-1] if rows else None)
+        if not any(r and str(r[0]).strip() == step_id for r in rows):
+            await message.answer(
+                f"⚠️ Запись не появилась в листе «{GOALS_WORKSHEET_NAME}». Проверьте права и название листа."
+            )
+    except Exception:
+        logging.exception("Failed to verify step append")
     await state.clear()
     await show_goals_node_from_message(message, state, parent_id)
     await delete_user_message(message)
@@ -455,6 +487,7 @@ async def on_goals_comment_text(message: Message, state: FSMContext):
 
 
 async def on_goals_due_edit_current(callback: CallbackQuery, state: FSMContext):
+    logger.info("on_goals_due_edit_current user=%s", callback.from_user.id)
     if not is_allowed(callback.from_user.id):
         await callback.answer("🚫 Доступ запрещен.", show_alert=True)
         return
@@ -482,6 +515,7 @@ async def on_goals_due_edit_current(callback: CallbackQuery, state: FSMContext):
 
 
 async def on_goals_due_edit_text(message: Message, state: FSMContext):
+    logger.info("on_goals_due_edit_text user=%s text=%s", message.from_user.id, message.text)
     if not is_allowed(message.from_user.id):
         await message.answer("🚫 Доступ запрещен.")
         await delete_user_message(message)
@@ -503,11 +537,24 @@ async def on_goals_due_edit_text(message: Message, state: FSMContext):
         worksheet = await get_goals_ws()
         await worksheet.update(f"G{row_idx}", [[due]], value_input_option="USER_ENTERED")
         await worksheet.update(f"I{row_idx}", [[today]], value_input_option="USER_ENTERED")
+        logging.info("Due updated: id=%s row=%s due=%s", current_id, row_idx, due)
     except Exception:
         logging.exception("Failed to update due date")
         await message.answer("❗ Ошибка обновления срока.")
         await delete_user_message(message)
         return
+    try:
+        rows = await load_goals_rows()
+        index = index_goals(rows)
+        row = index.get(current_id, (None, []))[1] if current_id else []
+        current_due = str(row[6]).strip() if len(row) > 6 else ""
+        logging.info("Due verify: id=%s expected=%s actual=%s", current_id, due, current_due)
+        if current_due != due:
+            await message.answer(
+                f"⚠️ Срок не обновился в листе «{GOALS_WORKSHEET_NAME}». Проверьте права и название листа."
+            )
+    except Exception:
+        logging.exception("Failed to verify due update")
     await state.clear()
     if current_id:
         await show_goals_node_from_message(message, state, current_id)
@@ -596,3 +643,4 @@ def register_goals(dp):
     dp.message.register(on_goals_delegate_name, GoalsFlow.waiting_delegate_name)
     dp.message.register(on_goals_comment_text, GoalsFlow.waiting_comment_text)
     dp.message.register(on_goals_due_edit_text, GoalsFlow.waiting_due_edit)
+logger = logging.getLogger(__name__)

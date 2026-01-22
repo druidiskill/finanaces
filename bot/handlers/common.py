@@ -1,4 +1,4 @@
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 from aiogram.utils.keyboard import InlineKeyboardBuilder
@@ -68,4 +68,4 @@ def register_common(dp):
     dp.callback_query.register(on_section_time, lambda c: c.data == "section_time")
     dp.callback_query.register(on_section_back, lambda c: c.data == "section_back")
     dp.callback_query.register(on_cancel, lambda c: c.data == "cancel")
-    dp.message.register(start)
+    dp.message.register(start, StateFilter(None))

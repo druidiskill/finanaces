@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher
+from aiogram.fsm.storage.memory import MemoryStorage
 
 from bot.config import BOT_TOKEN, ensure_env
 from bot.handlers.common import register_common
@@ -12,10 +13,14 @@ from bot.handlers.summary import register_summary
 
 async def main() -> None:
     ensure_env()
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s %(levelname)s %(name)s: %(message)s",
+        force=True,
+    )
 
     bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher()
+    dp = Dispatcher(storage=MemoryStorage())
 
     register_common(dp)
     register_finance(dp)
