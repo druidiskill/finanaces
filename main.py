@@ -370,8 +370,7 @@ def compute_net_profit(rows: list[list[str]]):
             income += amount
         elif row_kind == "Расход":
             expense += amount
-    return income, expense, income - expense
-
+    return income - expense
 
 
 async def start(message: Message):
@@ -609,16 +608,12 @@ async def on_summary(callback: CallbackQuery, state: FSMContext):
         return
     await state.clear()
     rows = await load_rows_from_sheet()
-    income, expense, net = compute_net_profit(rows)
-    text = "\n".join(
-        [
-            "💹 Чистая прибыль за все время:",
-            f"Доходы: {render_amount(income)}",
-            f"Расходы: {render_amount(expense)}",
-            f"Итого: {render_amount(net)}",
-        ]
+    net = compute_net_profit(rows)
+    await edit_or_answer(
+        callback,
+        f"💹 Чистая прибыль за все время: {render_amount(net)}",
+        reply_markup=build_summary_kind_kb(),
     )
-    await edit_or_answer(callback, text, reply_markup=build_summary_kind_kb())
     await callback.answer()
 
 
@@ -781,9 +776,8 @@ async def show_summary(callback: CallbackQuery, state: FSMContext, show_all: boo
     rows = await load_rows_from_sheet()
     total, buckets = summarize_rows(rows, kind, start, end, [] if show_all else prefix)
     prefix_label = "Все категории" if show_all or not prefix else format_category_path(prefix)
-    title = "🧾 Сводка"
     lines = [
-        f"{title}",
+        "🧾 Сводка",
         f"Тип: {normalize_kind(kind)}",
         f"Период: {start.strftime('%d.%m.%Y')} - {end.strftime('%d.%m.%Y')}",
         f"Категория: {prefix_label}",
@@ -796,7 +790,6 @@ async def show_summary(callback: CallbackQuery, state: FSMContext, show_all: boo
             lines.append(f"• {name}: {render_amount(amount)}")
     await edit_or_answer(callback, "\n".join(lines), reply_markup=build_main_kb())
     await state.clear()
-    await callback.answer()
 
 
 async def main():
