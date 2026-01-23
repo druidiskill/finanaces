@@ -36,6 +36,30 @@ SCOPES = [
     "https://www.googleapis.com/auth/drive",
 ]
 
+CALDAV_URL = os.getenv("CALDAV_URL", "").strip()
+CALDAV_USERNAME = os.getenv("CALDAV_USERNAME", "").strip()
+CALDAV_PASSWORD = os.getenv("CALDAV_PASSWORD", "").strip()
+
+CALDAV_POOL_CALENDARS = [
+    value.strip()
+    for value in os.getenv("CALDAV_POOL_CALENDARS", "").split(",")
+    if value.strip()
+]
+
+CALDAV_USER_CALENDARS = {}
+for pair in os.getenv("CALDAV_USER_CALENDARS", "").split(","):
+    if ":" not in pair:
+        continue
+    user_id, calendar_id = pair.split(":", 1)
+    user_id = user_id.strip()
+    calendar_id = calendar_id.strip()
+    if not user_id or not calendar_id:
+        continue
+    try:
+        CALDAV_USER_CALENDARS[int(user_id)] = calendar_id
+    except ValueError:
+        continue
+
 
 def ensure_env():
     missing = []

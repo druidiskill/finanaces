@@ -36,18 +36,6 @@ async def on_section_finance(callback: CallbackQuery):
     await callback.answer()
 
 
-async def on_section_time(callback: CallbackQuery):
-    if not is_allowed(callback.from_user.id):
-        await callback.answer("⛔ Доступ запрещен.", show_alert=True)
-        return
-    await edit_or_answer(
-        callback,
-        "⏳ Раздел «Тайм-менеджмент» в разработке.",
-        reply_markup=build_main_kb(),
-    )
-    await callback.answer()
-
-
 async def on_section_back(callback: CallbackQuery):
     if not is_allowed(callback.from_user.id):
         await callback.answer("⛔ Доступ запрещен.", show_alert=True)
@@ -65,7 +53,6 @@ async def on_cancel(callback: CallbackQuery, state: FSMContext):
 def register_common(dp):
     dp.message.register(on_start, CommandStart())
     dp.callback_query.register(on_section_finance, lambda c: c.data == "section_finance")
-    dp.callback_query.register(on_section_time, lambda c: c.data == "section_time")
     dp.callback_query.register(on_section_back, lambda c: c.data == "section_back")
     dp.callback_query.register(on_cancel, lambda c: c.data == "cancel")
     dp.message.register(start, StateFilter(None))

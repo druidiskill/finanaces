@@ -7,7 +7,7 @@ def build_main_kb():
     kb = InlineKeyboardBuilder()
     kb.button(text="💼 Учет доходов/расходов", callback_data="section_finance")
     kb.button(text="🎯 Цели", callback_data="section_goals")
-    kb.button(text="⏳ Тайм-менеджмент", callback_data="section_time")
+    kb.button(text="⏱ Тайм-менеджмент", callback_data="section_time")
     kb.adjust(1)
     return kb.as_markup()
 
@@ -52,7 +52,7 @@ def build_summary_period_kb():
     kb.button(text="📅 Сегодня", callback_data="sum_period:today")
     kb.button(text="🗓️ 7 дней", callback_data="sum_period:7d")
     kb.button(text="🗓️ 30 дней", callback_data="sum_period:30d")
-    kb.button(text="🧭 Диапазон", callback_data="sum_period:range")
+    kb.button(text="🧪 Диапазон", callback_data="sum_period:range")
     kb.button(text="❌ Отмена", callback_data="cancel")
     kb.adjust(1)
     return kb.as_markup()
@@ -115,5 +115,50 @@ def build_goal_status_kb():
     kb.button(text="⚙️ В процессе", callback_data="goals_status_set:in_progress")
     kb.button(text="✅ Выполнено", callback_data="goals_status_set:done")
     kb.button(text="❌ Отмена", callback_data="cancel")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def build_time_root_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="📅 Моё расписание", callback_data="time_my")
+    kb.button(text="📥 Календари-пулы", callback_data="time_pools")
+    kb.button(text="👤 Назначить задачу", callback_data="time_assign")
+    kb.button(text="🔙 Назад", callback_data="section_back")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def build_time_pools_kb(pools: list[str]):
+    kb = InlineKeyboardBuilder()
+    for idx, name in enumerate(pools):
+        kb.button(text=f"📥 {name}", callback_data=f"time_pool:{idx}")
+    kb.button(text="🔙 Назад", callback_data="time_root")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def build_time_pool_events_kb(events: list[dict]):
+    kb = InlineKeyboardBuilder()
+    for idx, item in enumerate(events):
+        kb.button(text=item["label"], callback_data=f"time_pool_event:{idx}")
+    kb.button(text="🔙 Назад", callback_data="time_pools")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def build_time_assign_user_kb(users: list[dict]):
+    kb = InlineKeyboardBuilder()
+    for item in users:
+        kb.button(text=f"👤 {item['name']}", callback_data=f"time_assign_to:{item['id']}")
+    kb.button(text="🔙 Назад", callback_data="time_assign")
+    kb.adjust(1)
+    return kb.as_markup()
+
+
+def build_time_my_kb():
+    kb = InlineKeyboardBuilder()
+    kb.button(text="🔄 Обновить", callback_data="time_my")
+    kb.button(text="🔙 Назад", callback_data="time_root")
     kb.adjust(1)
     return kb.as_markup()

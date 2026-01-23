@@ -23,3 +23,9 @@ class GoalsFlow(StatesGroup):
     waiting_due_edit = State()
     waiting_delegate_name = State()
     waiting_comment_text = State()
+
+
+class TimeFlow(StatesGroup):
+    choosing_pool = State()
+    choosing_event = State()
+    choosing_assignee = State()

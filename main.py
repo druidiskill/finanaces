@@ -9,6 +9,7 @@ from bot.handlers.common import register_common
 from bot.handlers.finance import register_finance
 from bot.handlers.goals import register_goals
 from bot.handlers.summary import register_summary
+from bot.handlers.time_management import register_time_management
 
 
 async def main() -> None:
@@ -26,6 +27,7 @@ async def main() -> None:
     register_finance(dp)
     register_summary(dp)
     register_goals(dp)
+    register_time_management(dp)
 
     await dp.start_polling(bot)
 
