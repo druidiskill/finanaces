@@ -184,6 +184,7 @@ async def income_confirm_handler(callback: CallbackQuery, state: FSMContext) -> 
     transaction = result["transaction"]
     fix_allocation = result["fix_allocation"]
     needen_allocation = result["needen_allocation"]
+    past_last_allocation = result["past_last_allocation"]
     totals = database.get_day_totals()
     wallet_map = database.get_wallet_map()
     income_wallet = wallet_map.get(transaction.wallet_id) if transaction.wallet_id is not None else None
@@ -247,6 +248,47 @@ async def income_confirm_handler(callback: CallbackQuery, state: FSMContext) -> 
             )
         needen_text = "\n" + "\n".join(needen_lines)
 
+    past_last_text = ""
+    if past_last_allocation["allocations"]:
+        grouped_past_last_allocations: dict[int, dict[str, object]] = {}
+        for allocation in past_last_allocation["allocations"]:
+            past_last = allocation["past_last"]
+            past_last_id = past_last.ID
+            if past_last_id is None:
+                continue
+            if past_last_id not in grouped_past_last_allocations:
+                grouped_past_last_allocations[past_last_id] = {
+                    "past_last": past_last,
+                    "allocated_amount": 0.0,
+                    "transfer_required": False,
+                    "weight": allocation["weight"],
+                }
+            grouped_past_last_allocations[past_last_id]["allocated_amount"] = round(
+                float(grouped_past_last_allocations[past_last_id]["allocated_amount"]) + allocation["allocated_amount"],
+                2,
+            )
+            grouped_past_last_allocations[past_last_id]["past_last"] = past_last
+            grouped_past_last_allocations[past_last_id]["transfer_required"] = (
+                bool(grouped_past_last_allocations[past_last_id]["transfer_required"]) or allocation["transfer_required"]
+            )
+
+        past_last_lines = [f"🗂️ В past/last: {past_last_allocation['allocated_amount']:.2f}"]
+        for index, grouped in enumerate(grouped_past_last_allocations.values(), start=1):
+            past_last = grouped["past_last"]
+            target_wallet = wallet_map.get(past_last.wallet) if past_last.wallet is not None else None
+            target_wallet_name = target_wallet.name if target_wallet else "не указан"
+            transfer_suffix = ""
+            if grouped["transfer_required"] and income_wallet is not None:
+                transfer_suffix = f" | перевод: {income_wallet.name} -> {target_wallet_name}"
+            past_last_lines.append(
+                f"{index}) {past_last.name}: "
+                f"+{float(grouped['allocated_amount']):.2f} "
+                f"(накоплено {past_last.summ_now:.2f}, "
+                f"доля {float(grouped['weight']) * 100:.2f}%, "
+                f"хранение: {target_wallet_name}){transfer_suffix}"
+            )
+        past_last_text = "\n" + "\n".join(past_last_lines)
+
     await state.clear()
     await callback.message.edit_text(
         "✅ Доход сохранен.\n"
@@ -254,7 +296,7 @@ async def income_confirm_handler(callback: CallbackQuery, state: FSMContext) -> 
         f"Сумма: {transaction.amount:.2f}\n"
         f"Учителям: {transaction.teachers_amount:.2f}\n"
         f"Налоги: {transaction.taxes_amount:.2f}\n"
-        f"Личные: {transaction.spendable_personal_amount:.2f}{allocation_text}{needen_text}\n\n"
+        f"Личные: {transaction.spendable_personal_amount:.2f}{allocation_text}{needen_text}{past_last_text}\n\n"
         f"📅 Итого за {totals['date']}:\n"
         f"💰 Доходы: {totals['income_total']:.2f}\n"
         f"👨‍🏫 Учителям: {totals['teachers_total']:.2f}\n"

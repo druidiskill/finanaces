@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, fields
-from datetime import datetime
+from datetime import date, datetime
 import json
 from pathlib import Path
 import sqlite3
@@ -50,6 +50,8 @@ class PastLast:
     name: str = ""
     parent_id: int | None = None
     percent_in_categor: int = 1
+    wallet: int | None = None
+    summ_now: float = 0.0
 
 
 @dataclass(slots=True)
@@ -89,7 +91,10 @@ class IncomeTransaction:
 class ExpenseTransaction:
     id: int | None = None
     user_id: int = 0
-    category: str = ""
+    section: str = ""
+    category_id: int = 0
+    category_name: str = ""
+    wallet_id: int | None = None
     amount: float = 0.0
     created_at: str = ""
 
@@ -224,6 +229,13 @@ class FixesRepository(BaseTableRepository[Fix]):
         rows = self.connection.execute(query, params).fetchall()
         return [self._row_to_model(row) for row in rows]
 
+    def get_by_name(self, name: str) -> Fix | None:
+        row = self.connection.execute(
+            f"SELECT * FROM {self.quoted_table_name} WHERE name = ? LIMIT 1",
+            (name,),
+        ).fetchone()
+        return self._row_to_model(row) if row else None
+
 
 class NeedenRepository(BaseTableRepository[Needen]):
     table_name = "needen"
@@ -251,6 +263,8 @@ class PastLastRepository(BaseTableRepository[PastLast]):
         "name",
         "parent_id",
         "percent_in_categor",
+        "wallet",
+        "summ_now",
     )
 
     def list_children(self, parent_id: int | None) -> list[PastLast]:
@@ -260,6 +274,12 @@ class PastLastRepository(BaseTableRepository[PastLast]):
         else:
             query = f"SELECT * FROM {self.quoted_table_name} WHERE parent_id = ? ORDER BY ID"
             rows = self.connection.execute(query, (parent_id,)).fetchall()
+        return [self._row_to_model(row) for row in rows]
+
+    def list_active(self) -> list[PastLast]:
+        rows = self.connection.execute(
+            f"SELECT * FROM {self.quoted_table_name} WHERE active = 1 ORDER BY ID"
+        ).fetchall()
         return [self._row_to_model(row) for row in rows]
 
 
@@ -500,6 +520,44 @@ class ExpenseTransactionRepository:
     def __init__(self, connection: sqlite3.Connection) -> None:
         self.connection = connection
 
+    def create(
+        self,
+        *,
+        user_id: int,
+        section: str,
+        category_id: int,
+        category_name: str,
+        wallet_id: int | None,
+        amount: float,
+    ) -> ExpenseTransaction:
+        created_at = datetime.now().isoformat(timespec="seconds")
+        cursor = self.connection.execute(
+            """
+            INSERT INTO expense_transactions (
+                user_id,
+                category,
+                section,
+                category_id,
+                category_name,
+                wallet_id,
+                amount,
+                created_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (user_id, category_name, section, category_id, category_name, wallet_id, amount, created_at),
+        )
+        self.connection.commit()
+        row = self.connection.execute(
+            """
+            SELECT id, user_id, section, category_id, category_name, wallet_id, amount, created_at
+            FROM expense_transactions
+            WHERE id = ?
+            """,
+            (cursor.lastrowid,),
+        ).fetchone()
+        return ExpenseTransaction(**dict(row))
+
     def total_for_date(self, target_date: str) -> float:
         row = self.connection.execute(
             """
@@ -510,6 +568,18 @@ class ExpenseTransactionRepository:
             (target_date,),
         ).fetchone()
         return float(row[0])
+
+    def list_recent(self, limit: int = 10) -> list[ExpenseTransaction]:
+        rows = self.connection.execute(
+            """
+            SELECT id, user_id, section, category_id, category_name, wallet_id, amount, created_at
+            FROM expense_transactions
+            ORDER BY id DESC
+            LIMIT ?
+            """,
+            (limit,),
+        ).fetchall()
+        return [ExpenseTransaction(**dict(row)) for row in rows]
 
 
 class WalletRepository:
@@ -798,7 +868,9 @@ class FinancesDatabase:
                 active INTEGER NOT NULL DEFAULT 1,
                 name TEXT NOT NULL,
                 parent_id INTEGER REFERENCES "past/last" (ID),
-                percent_in_categor INTEGER DEFAULT 1 NOT NULL
+                percent_in_categor INTEGER DEFAULT 1 NOT NULL,
+                wallet INTEGER REFERENCES wallets (ID),
+                summ_now INTEGER NOT NULL DEFAULT 0
             );
 
             CREATE TABLE IF NOT EXISTS const (
@@ -833,7 +905,10 @@ class FinancesDatabase:
             CREATE TABLE IF NOT EXISTS expense_transactions (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
                 user_id INTEGER NOT NULL,
-                category TEXT NOT NULL,
+                section TEXT NOT NULL DEFAULT '',
+                category_id INTEGER NOT NULL DEFAULT 0,
+                category_name TEXT NOT NULL DEFAULT '',
+                wallet_id INTEGER REFERENCES wallets (ID),
                 amount REAL NOT NULL,
                 created_at TEXT NOT NULL
             );
@@ -860,11 +935,18 @@ class FinancesDatabase:
             row["name"]
             for row in self.connection.execute("PRAGMA table_info(income_transactions)").fetchall()
         }
+        expense_transaction_columns = {
+            row["name"]
+            for row in self.connection.execute("PRAGMA table_info(expense_transactions)").fetchall()
+        }
         fixes_columns = {
             row["name"] for row in self.connection.execute("PRAGMA table_info(fixes)").fetchall()
         }
         needen_columns = {
             row["name"] for row in self.connection.execute("PRAGMA table_info(needen)").fetchall()
+        }
+        past_last_columns = {
+            row["name"] for row in self.connection.execute('PRAGMA table_info("past/last")').fetchall()
         }
         if "wallet" not in fixes_columns:
             self.connection.execute(
@@ -873,6 +955,14 @@ class FinancesDatabase:
         if "wallet" not in needen_columns:
             self.connection.execute(
                 "ALTER TABLE needen ADD COLUMN wallet INTEGER NOT NULL DEFAULT 1 REFERENCES wallets (ID)"
+            )
+        if "wallet" not in past_last_columns:
+            self.connection.execute(
+                'ALTER TABLE "past/last" ADD COLUMN wallet INTEGER REFERENCES wallets (ID)'
+            )
+        if "summ_now" not in past_last_columns:
+            self.connection.execute(
+                'ALTER TABLE "past/last" ADD COLUMN summ_now INTEGER NOT NULL DEFAULT 0'
             )
         if "fix_allocated_amount" not in income_transaction_columns:
             self.connection.execute(
@@ -885,6 +975,22 @@ class FinancesDatabase:
         if "wallet_id" not in income_transaction_columns:
             self.connection.execute(
                 "ALTER TABLE income_transactions ADD COLUMN wallet_id INTEGER REFERENCES wallets (ID)"
+            )
+        if "section" not in expense_transaction_columns:
+            self.connection.execute(
+                "ALTER TABLE expense_transactions ADD COLUMN section TEXT NOT NULL DEFAULT ''"
+            )
+        if "category_id" not in expense_transaction_columns:
+            self.connection.execute(
+                "ALTER TABLE expense_transactions ADD COLUMN category_id INTEGER NOT NULL DEFAULT 0"
+            )
+        if "category_name" not in expense_transaction_columns:
+            self.connection.execute(
+                "ALTER TABLE expense_transactions ADD COLUMN category_name TEXT NOT NULL DEFAULT ''"
+            )
+        if "wallet_id" not in expense_transaction_columns:
+            self.connection.execute(
+                "ALTER TABLE expense_transactions ADD COLUMN wallet_id INTEGER REFERENCES wallets (ID)"
             )
         self.connection.execute(
             """
@@ -1054,6 +1160,36 @@ class FinancesDatabase:
             "allocations": allocations,
             "fix": allocations[-1]["fix"] if allocations else None,
             "remaining_personal_amount": remaining_amount,
+            "task_changes": self._diff_pending_task_maps(pending_tasks_before, pending_tasks_after),
+        }
+
+    def allocate_to_named_fix(
+        self,
+        *,
+        fix_name: str,
+        amount: float,
+        income_wallet_id: int | None,
+    ) -> dict[str, Any]:
+        if amount <= 0:
+            return {"allocated_amount": 0.0, "fix": None, "transfer_required": False, "task_changes": []}
+
+        target_fix = self.fixes.get_by_name(fix_name)
+        if target_fix is None:
+            return {"allocated_amount": 0.0, "fix": None, "transfer_required": False, "task_changes": []}
+
+        pending_tasks_before = self._capture_pending_task_map()
+        target_fix.summ_now = round(target_fix.summ_now + amount, 2)
+        updated_fix = self.fixes.update(target_fix)
+        transfer_required = self._record_transfer_if_needed(
+            income_wallet_id=income_wallet_id,
+            target_wallet_id=updated_fix.wallet,
+            allocated_amount=amount,
+        )
+        pending_tasks_after = self._capture_pending_task_map()
+        return {
+            "allocated_amount": round(amount, 2),
+            "fix": updated_fix,
+            "transfer_required": transfer_required,
             "task_changes": self._diff_pending_task_maps(pending_tasks_before, pending_tasks_after),
         }
 
@@ -1250,6 +1386,98 @@ class FinancesDatabase:
             "task_changes": self._diff_pending_task_maps(pending_tasks_before, pending_tasks_after),
         }
 
+    def allocate_free_amount_to_past_last(
+        self,
+        amount: float,
+        *,
+        income_wallet_id: int | None,
+    ) -> dict[str, Any]:
+        remaining_amount = round(amount, 2)
+        if remaining_amount <= 0:
+            return {
+                "allocated_amount": 0.0,
+                "allocations": [],
+                "remaining_free_amount": remaining_amount,
+                "task_changes": [],
+            }
+
+        all_items = self.past_last.list_active()
+        if not all_items:
+            return {
+                "allocated_amount": 0.0,
+                "allocations": [],
+                "remaining_free_amount": remaining_amount,
+                "task_changes": [],
+            }
+
+        items_by_id = {item.ID: item for item in all_items if item.ID is not None}
+        parent_ids = {item.parent_id for item in all_items if item.parent_id is not None}
+        leaf_items = [item for item in all_items if item.ID not in parent_ids]
+
+        def weight_for_item(item: PastLast) -> float:
+            weight = 1.0
+            current = item
+            while True:
+                weight *= current.percent_in_categor / 100.0
+                if current.parent_id is None:
+                    break
+                parent = items_by_id.get(current.parent_id)
+                if parent is None:
+                    break
+                current = parent
+            return weight
+
+        weighted_leaf_items = [(item, weight_for_item(item)) for item in leaf_items]
+        weighted_leaf_items = [(item, weight) for item, weight in weighted_leaf_items if weight > 0]
+        if not weighted_leaf_items:
+            return {
+                "allocated_amount": 0.0,
+                "allocations": [],
+                "remaining_free_amount": remaining_amount,
+                "task_changes": [],
+            }
+
+        pending_tasks_before = self._capture_pending_task_map()
+        allocations: list[dict[str, Any]] = []
+        distributed_total = 0.0
+
+        for index, (item, weight) in enumerate(weighted_leaf_items):
+            if index == len(weighted_leaf_items) - 1:
+                allocated_amount = round(remaining_amount - distributed_total, 2)
+            else:
+                allocated_amount = round(remaining_amount * weight, 2)
+                distributed_total = round(distributed_total + allocated_amount, 2)
+
+            if allocated_amount <= 0:
+                continue
+
+            item.summ_now = round(item.summ_now + allocated_amount, 2)
+            updated_item = self.past_last.update(item)
+            transfer_required = False
+            if updated_item.wallet is not None:
+                transfer_required = self._record_transfer_if_needed(
+                    income_wallet_id=income_wallet_id,
+                    target_wallet_id=updated_item.wallet,
+                    allocated_amount=allocated_amount,
+                )
+            allocations.append(
+                {
+                    "allocated_amount": allocated_amount,
+                    "past_last": updated_item,
+                    "weight": weight,
+                    "transfer_required": transfer_required,
+                }
+            )
+
+        allocated_total = round(sum(item["allocated_amount"] for item in allocations), 2)
+        pending_tasks_after = self._capture_pending_task_map()
+        return {
+            "allocated_amount": allocated_total,
+            "allocations": allocations,
+            "remaining_free_amount": round(remaining_amount - allocated_total, 2),
+            "task_changes": self._diff_pending_task_maps(pending_tasks_before, pending_tasks_after),
+        }
+
     def create_income_transaction(
         self,
         *,
@@ -1266,6 +1494,16 @@ class FinancesDatabase:
             source_type=source_type,
             destination=destination,
         )
+        teacher_fix_allocation = self.allocate_to_named_fix(
+            fix_name="Учителя",
+            amount=distribution["teachers_amount"],
+            income_wallet_id=wallet_id,
+        )
+        tax_fix_allocation = self.allocate_to_named_fix(
+            fix_name="Налоги",
+            amount=distribution["taxes_amount"],
+            income_wallet_id=wallet_id,
+        )
         restrict_wallet_id = 1 if source_type == "cash" else None
         fix_allocation = self.allocate_personal_amount_to_fix(
             distribution["personal_amount"],
@@ -1276,7 +1514,11 @@ class FinancesDatabase:
             fix_allocation["remaining_personal_amount"],
             income_wallet_id=wallet_id,
         )
-        spendable_personal_amount = needen_allocation["remaining_personal_amount"]
+        past_last_allocation = self.allocate_free_amount_to_past_last(
+            needen_allocation["remaining_personal_amount"],
+            income_wallet_id=wallet_id,
+        )
+        spendable_personal_amount = past_last_allocation["remaining_free_amount"]
         if wallet_id is not None:
             self.wallets.adjust_balance(wallet_id, distribution["amount"])
         transaction = self.income_transactions.create(
@@ -1304,9 +1546,12 @@ class FinancesDatabase:
                 "amount": distribution["amount"],
                 "teachers_amount": distribution["teachers_amount"],
                 "taxes_amount": distribution["taxes_amount"],
+                "teacher_fix_allocated_amount": teacher_fix_allocation["allocated_amount"],
+                "tax_fix_allocated_amount": tax_fix_allocation["allocated_amount"],
                 "personal_amount": distribution["personal_amount"],
                 "fix_allocated_amount": fix_allocation["allocated_amount"],
                 "needen_allocated_amount": needen_allocation["allocated_amount"],
+                "past_last_allocated_amount": past_last_allocation["allocated_amount"],
                 "spendable_personal_amount": spendable_personal_amount,
                 "fix_id": fix_allocation["fix"].ID if fix_allocation["fix"] else None,
             },
@@ -1325,6 +1570,24 @@ class FinancesDatabase:
                     "transfer_required": allocation["transfer_required"],
                 },
             )
+        for action_type, named_allocation in (
+            ("teacher_fix_allocation_created", teacher_fix_allocation),
+            ("tax_fix_allocation_created", tax_fix_allocation),
+        ):
+            if named_allocation["fix"] is None or named_allocation["allocated_amount"] <= 0:
+                continue
+            self.history.create(
+                user_id=user_id,
+                action_type=action_type,
+                payload={
+                    "fix_id": named_allocation["fix"].ID,
+                    "fix_name": named_allocation["fix"].name,
+                    "allocated_amount": named_allocation["allocated_amount"],
+                    "summ_now": named_allocation["fix"].summ_now,
+                    "wallet_id": named_allocation["fix"].wallet,
+                    "transfer_required": named_allocation["transfer_required"],
+                },
+            )
         for allocation in needen_allocation["allocations"]:
             self.history.create(
                 user_id=user_id,
@@ -1339,10 +1602,27 @@ class FinancesDatabase:
                     "transfer_required": allocation["transfer_required"],
                 },
             )
+        for allocation in past_last_allocation["allocations"]:
+            self.history.create(
+                user_id=user_id,
+                action_type="past_last_allocation_created",
+                payload={
+                    "past_last_id": allocation["past_last"].ID,
+                    "past_last_name": allocation["past_last"].name,
+                    "allocated_amount": allocation["allocated_amount"],
+                    "summ_now": allocation["past_last"].summ_now,
+                    "weight": allocation["weight"],
+                    "wallet_id": allocation["past_last"].wallet,
+                    "transfer_required": allocation["transfer_required"],
+                },
+            )
         return {
             "transaction": transaction,
+            "teacher_fix_allocation": teacher_fix_allocation,
+            "tax_fix_allocation": tax_fix_allocation,
             "fix_allocation": fix_allocation,
             "needen_allocation": needen_allocation,
+            "past_last_allocation": past_last_allocation,
         }
 
     def get_day_totals(self, target_date: str | None = None) -> dict[str, Any]:
@@ -1373,6 +1653,289 @@ class FinancesDatabase:
             "wallets": wallets,
             "pending_tasks": pending_tasks,
             "nearest_fix": nearest_fix,
+        }
+
+    def list_admin_categories(self, section: str) -> list[Fix | Needen | PastLast]:
+        if section == "fixes":
+            return self.list_expense_categories("fixes")
+        if section == "needen":
+            return self.needen.list_all()
+        if section == "past_last":
+            return self.past_last.list_all()
+        raise ValueError(f"Unknown admin section: {section}")
+
+    def get_admin_category(self, section: str, category_id: int) -> Fix | Needen | PastLast | None:
+        if section == "fixes":
+            return self.fixes.get_by_id(category_id)
+        if section == "needen":
+            return self.needen.get_by_id(category_id)
+        if section == "past_last":
+            return self.past_last.get_by_id(category_id)
+        raise ValueError(f"Unknown admin section: {section}")
+
+    def get_admin_category_field_labels(self, section: str) -> dict[str, str]:
+        if section == "fixes":
+            return {
+                "name": "Название",
+                "active": "Активна",
+                "summ_fix": "Сумма цели",
+                "date_day": "День месяца",
+                "can_finish": "Конечная оплата",
+                "summ_finish": "Остаток выплат",
+                "summ_now": "Накоплено сейчас",
+                "wallet": "Кошелек",
+            }
+        if section == "needen":
+            return {
+                "name": "Название",
+                "active": "Активна",
+                "summ_need": "Сумма цели",
+                "summ_now": "Накоплено сейчас",
+                "wallet": "Кошелек",
+            }
+        if section == "past_last":
+            return {
+                "name": "Название",
+                "active": "Активна",
+                "parent_id": "ID родителя",
+                "percent_in_categor": "% в категории",
+                "summ_now": "Накоплено сейчас",
+                "wallet": "Кошелек",
+            }
+        raise ValueError(f"Unknown admin section: {section}")
+
+    def list_admin_wallets(self) -> list[Wallet]:
+        return self.wallets.list_all()
+
+    def list_past_last_parent_candidates(self, category_id: int) -> list[PastLast]:
+        items = self.past_last.list_all()
+        children_by_parent: dict[int | None, list[PastLast]] = {}
+        for item in items:
+            children_by_parent.setdefault(item.parent_id, []).append(item)
+
+        excluded_ids = {category_id}
+        queue = [category_id]
+        while queue:
+            current_id = queue.pop()
+            for child in children_by_parent.get(current_id, []):
+                if child.ID is None or child.ID in excluded_ids:
+                    continue
+                excluded_ids.add(child.ID)
+                queue.append(child.ID)
+
+        return [item for item in items if item.ID is not None and item.ID not in excluded_ids]
+
+    def create_admin_category(self, *, section: str, name: str) -> Fix | Needen | PastLast:
+        clean_name = name.strip()
+        if not clean_name:
+            raise ValueError("Название не может быть пустым.")
+
+        if section == "fixes":
+            return self.fixes.create(
+                Fix(
+                    name=clean_name,
+                    active=1,
+                    summ_fix=0,
+                    date_day=date.today().day,
+                    can_finish=0,
+                    summ_finish=None,
+                    summ_now=0.0,
+                    wallet=1,
+                )
+            )
+        if section == "needen":
+            return self.needen.create(
+                Needen(
+                    name=clean_name,
+                    active=1,
+                    summ_need=0,
+                    summ_now=0.0,
+                    wallet=1,
+                )
+            )
+        if section == "past_last":
+            return self.past_last.create(
+                PastLast(
+                    name=clean_name,
+                    active=1,
+                    parent_id=None,
+                    percent_in_categor=0,
+                    wallet=1,
+                    summ_now=0.0,
+                )
+            )
+        raise ValueError(f"Unknown admin section: {section}")
+
+    def update_admin_category_field(
+        self,
+        *,
+        section: str,
+        category_id: int,
+        field_name: str,
+        raw_value: str,
+    ) -> Fix | Needen | PastLast:
+        item = self.get_admin_category(section, category_id)
+        if item is None:
+            raise LookupError(f"Category with ID={category_id} not found in {section}")
+
+        field_labels = self.get_admin_category_field_labels(section)
+        if field_name not in field_labels:
+            raise ValueError(f"Unknown field '{field_name}' for section '{section}'")
+
+        value_text = raw_value.strip()
+        parsed_value: object
+        if field_name == "name":
+            if not value_text:
+                raise ValueError("Название не может быть пустым.")
+            parsed_value = value_text
+        elif field_name in {"active", "can_finish"}:
+            normalized = value_text.lower()
+            truthy = {"1", "true", "yes", "y", "да", "on"}
+            falsy = {"0", "false", "no", "n", "нет", "off"}
+            if normalized in truthy:
+                parsed_value = 1
+            elif normalized in falsy:
+                parsed_value = 0
+            else:
+                raise ValueError("Введите 1/0, да/нет или true/false.")
+        elif field_name in {"date_day", "wallet", "parent_id"}:
+            if not value_text:
+                parsed_value = None if field_name == "parent_id" else 0
+            else:
+                parsed_value = int(value_text)
+            if field_name == "date_day" and parsed_value is not None and not 1 <= int(parsed_value) <= 31:
+                raise ValueError("День месяца должен быть в диапазоне от 1 до 31.")
+        elif field_name in {"summ_fix", "summ_need", "percent_in_categor"}:
+            parsed_value = int(float(value_text.replace(",", ".")))
+        elif field_name in {"summ_now", "summ_finish"}:
+            if not value_text and field_name == "summ_finish":
+                parsed_value = None
+            else:
+                parsed_value = float(value_text.replace(",", "."))
+        else:
+            raise ValueError(f"Unsupported field '{field_name}'")
+
+        setattr(item, field_name, parsed_value)
+        if section == "fixes":
+            return self.fixes.update(item)
+        if section == "needen":
+            return self.needen.update(item)
+        if section == "past_last":
+            return self.past_last.update(item)
+        raise ValueError(f"Unknown admin section: {section}")
+
+    def list_expense_categories(self, section: str) -> list[Fix | Needen | PastLast]:
+        if section == "fixes":
+            today_day = date.today().day
+            fixes = self.fixes.list_all(active_only=True)
+            return sorted(
+                fixes,
+                key=lambda item: (
+                    (item.date_day - today_day) % 31,
+                    item.date_day,
+                    item.ID if item.ID is not None else 0,
+                ),
+            )
+        if section == "needen":
+            return self.needen.list_active()
+        if section == "past_last":
+            active_items = self.past_last.list_active()
+            parent_ids = {item.parent_id for item in active_items if item.parent_id is not None}
+            return [item for item in active_items if item.ID not in parent_ids]
+        raise ValueError(f"Unknown expense section: {section}")
+
+    def _decrease_category_balance(
+        self,
+        *,
+        section: str,
+        category_id: int,
+        amount: float,
+    ) -> Fix | Needen | PastLast:
+        if section == "fixes":
+            item = self.fixes.get_by_id(category_id)
+            if item is None:
+                raise LookupError(f"Fix with ID={category_id} not found")
+            item.summ_now = round(item.summ_now - amount, 2)
+            return self.fixes.update(item)
+
+        if section == "needen":
+            item = self.needen.get_by_id(category_id)
+            if item is None:
+                raise LookupError(f"Needen with ID={category_id} not found")
+            item.summ_now = round(item.summ_now - amount, 2)
+            return self.needen.update(item)
+
+        if section == "past_last":
+            item = self.past_last.get_by_id(category_id)
+            if item is None:
+                raise LookupError(f"PastLast with ID={category_id} not found")
+            item.summ_now = round(item.summ_now - amount, 2)
+            return self.past_last.update(item)
+
+        raise ValueError(f"Unknown expense section: {section}")
+
+    def create_expense_transaction(
+        self,
+        *,
+        user_id: int,
+        section: str,
+        category_id: int,
+        wallet_id: int,
+        amount: float,
+    ) -> dict[str, Any]:
+        normalized_amount = round(abs(amount), 2)
+        updated_category = self._decrease_category_balance(
+            section=section,
+            category_id=category_id,
+            amount=normalized_amount,
+        )
+        updated_wallet = self.wallets.adjust_balance(wallet_id, -normalized_amount)
+        transfer_required = False
+        category_wallet_id = getattr(updated_category, "wallet", None)
+        if category_wallet_id is not None and category_wallet_id != wallet_id:
+            self.transfer_tasks.create_or_net(category_wallet_id, wallet_id, normalized_amount)
+            transfer_required = True
+        transaction = self.expense_transactions.create(
+            user_id=user_id,
+            section=section,
+            category_id=category_id,
+            category_name=updated_category.name,
+            wallet_id=wallet_id,
+            amount=normalized_amount,
+        )
+        self.history.create(
+            user_id=user_id,
+            action_type="expense_transaction_created",
+            payload={
+                "transaction_id": transaction.id,
+                "section": section,
+                "category_id": category_id,
+                "category_name": updated_category.name,
+                "wallet_id": wallet_id,
+                "category_wallet_id": category_wallet_id,
+                "amount": normalized_amount,
+                "transfer_required": transfer_required,
+            },
+        )
+        if transfer_required and category_wallet_id is not None:
+            self.history.create(
+                user_id=user_id,
+                action_type="expense_transfer_task_created",
+                payload={
+                    "section": section,
+                    "category_id": category_id,
+                    "category_name": updated_category.name,
+                    "from_wallet_id": category_wallet_id,
+                    "to_wallet_id": wallet_id,
+                    "amount": normalized_amount,
+                },
+            )
+        return {
+            "transaction": transaction,
+            "updated_category": updated_category,
+            "updated_wallet": updated_wallet,
+            "transfer_required": transfer_required,
+            "category_wallet_id": category_wallet_id,
         }
 
     def close(self) -> None:
