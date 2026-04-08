@@ -102,8 +102,12 @@ def build_wallets_report_text() -> str:
     if not wallets:
         lines.append("Нет кошельков.")
     else:
+        total_amount = 0.0
         for index, wallet in enumerate(wallets, start=1):
             lines.append(f"{index}) {wallet.name}: {wallet.summ:.2f}")
+            total_amount += wallet.summ
+        lines.append("")
+        lines.append(f"Итого: {total_amount:.2f}")
     return "\n".join(lines)
 
 
@@ -148,4 +152,3 @@ def build_reports_transfers_text() -> str:
         to_name = to_wallet.name if to_wallet else f"#{task.to_wallet_id}"
         lines.append(f"{index}) {from_name} -> {to_name}: {task.amount:.2f}")
     return "\n".join(lines)
-
