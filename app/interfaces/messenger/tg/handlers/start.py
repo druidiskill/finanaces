@@ -1,12 +1,12 @@
-from aiogram import Router
+﻿from aiogram import Router
 from aiogram.filters import CommandStart
 from aiogram.filters.state import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot_app.filters import AllowedUserFilter
-from bot_app.keyboards import main_menu_keyboard
-from bot_app.utils import build_financial_overview_text
+from app.interfaces.messenger.tg.filters import AllowedUserFilter
+from app.interfaces.messenger.tg.keyboards import main_menu_keyboard
+from app.interfaces.messenger.tg.utils import build_financial_overview_text
 
 
 router = Router(name="start")
@@ -30,3 +30,4 @@ async def main_menu_handler(callback: CallbackQuery, state: FSMContext) -> None:
 @router.message(StateFilter(None))
 async def fallback_handler(message: Message, state: FSMContext) -> None:
     await message.answer(build_financial_overview_text(), reply_markup=main_menu_keyboard())
+

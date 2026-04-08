@@ -3,9 +3,9 @@ from aiogram.filters.state import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot_app.constants import CONST_LABELS
-from bot_app.filters import AdminUserFilter
-from bot_app.keyboards import (
+from app.interfaces.messenger.tg.constants import CONST_LABELS
+from app.interfaces.messenger.tg.filters import AdminUserFilter
+from app.interfaces.messenger.tg.keyboards import (
     admin_categories_keyboard,
     admin_category_fields_keyboard,
     admin_category_parent_keyboard,
@@ -15,9 +15,9 @@ from bot_app.keyboards import (
     const_menu_keyboard,
     single_action_keyboard,
 )
-from bot_app.services import database
-from bot_app.states import AdminStates
-from database import DEFAULT_CONST_VALUES
+from app.interfaces.messenger.tg.services import database
+from app.interfaces.messenger.tg.states import AdminStates
+from app.integrations.local.db.database import DEFAULT_CONST_VALUES
 
 
 router = Router(name="admin")
@@ -358,3 +358,4 @@ async def admin_history_handler(callback: CallbackQuery) -> None:
         reply_markup=admin_menu_keyboard(),
     )
     await callback.answer()
+

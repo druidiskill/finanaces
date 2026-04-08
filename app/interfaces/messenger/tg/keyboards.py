@@ -3,8 +3,8 @@ from __future__ import annotations
 from aiogram.types import InlineKeyboardMarkup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-from bot_app.constants import CONST_LABELS
-from bot_app.services import database
+from app.interfaces.messenger.tg.constants import CONST_LABELS
+from app.interfaces.messenger.tg.services import database
 
 
 def main_menu_keyboard() -> InlineKeyboardMarkup:
@@ -204,18 +204,66 @@ def admin_category_wallet_keyboard(*, section: str, category_id: int) -> InlineK
 
 def admin_category_parent_keyboard(*, category_id: int) -> InlineKeyboardMarkup:
     builder = InlineKeyboardBuilder()
-    builder.button(
-        text="🚫 Без родителя",
-        callback_data=f"admin:categories:parent:{category_id}:none",
-    )
+    builder.button(text="🚫 Без родителя", callback_data=f"admin:categories:parent:{category_id}:none")
     for item in database.list_past_last_parent_candidates(category_id):
         if item.ID is None:
             continue
-        builder.button(
-            text=item.name,
-            callback_data=f"admin:categories:parent:{category_id}:{item.ID}",
-        )
+        builder.button(text=item.name, callback_data=f"admin:categories:parent:{category_id}:{item.ID}")
     builder.button(text="⬅️ Назад", callback_data=f"admin:categories:item:past_last:{category_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def tasks_list_keyboard() -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    wallet_map = database.get_wallet_map()
+    for task in database.transfer_tasks.list_pending():
+        if task.id is None:
+            continue
+        from_wallet = wallet_map.get(task.from_wallet_id)
+        to_wallet = wallet_map.get(task.to_wallet_id)
+        from_name = from_wallet.name if from_wallet else f"#{task.from_wallet_id}"
+        to_name = to_wallet.name if to_wallet else f"#{task.to_wallet_id}"
+        builder.button(
+            text=f"{from_name} -> {to_name}: {task.amount:.2f}",
+            callback_data=f"tasks:view:{task.id}",
+        )
+    builder.button(text="⬅️ Назад", callback_data="menu:main")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def task_actions_keyboard(task_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Подтвердить выполнение", callback_data=f"tasks:complete:{task_id}")
+    builder.button(text="✏️ Изменить задачу", callback_data=f"tasks:edit:{task_id}")
+    builder.button(text="⬅️ Назад", callback_data="menu:tasks")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def task_edit_keyboard(task_id: int) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    builder.button(text="💵 Изменить сумму", callback_data=f"tasks:edit_amount:{task_id}")
+    builder.button(text="👛 Изменить откуда", callback_data=f"tasks:edit_from:{task_id}")
+    builder.button(text="🎯 Изменить куда", callback_data=f"tasks:edit_to:{task_id}")
+    builder.button(text="⬅️ Назад", callback_data=f"tasks:view:{task_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def task_wallet_select_keyboard(*, task_id: int, field: str, exclude_wallet_id: int | None = None) -> InlineKeyboardMarkup:
+    builder = InlineKeyboardBuilder()
+    for wallet in database.wallets.list_all():
+        if wallet.ID is None:
+            continue
+        if exclude_wallet_id is not None and wallet.ID == exclude_wallet_id:
+            continue
+        builder.button(
+            text=f"👛 {wallet.name} ({wallet.summ:.2f})",
+            callback_data=f"tasks:set_wallet:{field}:{task_id}:{wallet.ID}",
+        )
+    builder.button(text="⬅️ Назад", callback_data=f"tasks:edit:{task_id}")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -224,3 +272,4 @@ def single_action_keyboard(text: str, callback_data: str) -> InlineKeyboardMarku
     builder = InlineKeyboardBuilder()
     builder.button(text=text, callback_data=callback_data)
     return builder.as_markup()
+

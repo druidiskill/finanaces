@@ -1,9 +1,9 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from aiogram.filters import BaseFilter
 from aiogram.types import CallbackQuery, Message, TelegramObject
 
-from bot_app.services import settings
+from app.interfaces.messenger.tg.services import settings
 
 
 class AllowedUserFilter(BaseFilter):
@@ -24,3 +24,4 @@ def _extract_user_id(event: TelegramObject) -> int | None:
     if isinstance(event, CallbackQuery):
         return event.from_user.id if event.from_user else None
     return None
+

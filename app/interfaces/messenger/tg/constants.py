@@ -26,3 +26,4 @@ CONST_LABELS = {
     "tax_physical_percent": "Налог от физ. лиц",
     "tax_legal_percent": "Налог от юр. лиц",
 }
+

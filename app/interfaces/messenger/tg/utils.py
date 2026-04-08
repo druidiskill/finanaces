@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from typing import Any
 
-from bot_app.constants import INCOME_DESTINATION_LABELS, INCOME_SOURCE_LABELS, INCOME_TAX_LABELS
-from bot_app.services import database
+from app.interfaces.messenger.tg.constants import INCOME_DESTINATION_LABELS, INCOME_SOURCE_LABELS, INCOME_TAX_LABELS
+from app.interfaces.messenger.tg.services import database
 
 
 def format_distribution_preview(data: dict[str, Any], distribution: dict[str, float]) -> str:
@@ -30,9 +30,7 @@ def build_financial_overview_text() -> str:
     pending_tasks = snapshot["pending_tasks"]
     nearest_fix = snapshot["nearest_fix"]
 
-    wallet_lines = []
-    for wallet in wallets:
-        wallet_lines.append(f"- {wallet.name}: {wallet.summ:.2f}")
+    wallet_lines = [f"- {wallet.name}: {wallet.summ:.2f}" for wallet in wallets]
 
     nearest_fix_line = "нет"
     if nearest_fix is not None:
@@ -55,31 +53,42 @@ def build_financial_overview_text() -> str:
 
 
 def build_tasks_text() -> str:
-    wallet_map = database.get_wallet_map()
     pending_tasks = database.transfer_tasks.list_pending()
     if not pending_tasks:
         return "🧾 Задачи\nНет активных задач по переводу."
+    return f"🧾 Задачи по переводу\nАктивных задач: {len(pending_tasks)}\nВыберите задачу:"
 
-    lines = ["🧾 Задачи по переводу:"]
-    for index, task in enumerate(pending_tasks, start=1):
-        from_wallet = wallet_map.get(task.from_wallet_id)
-        to_wallet = wallet_map.get(task.to_wallet_id)
-        from_name = from_wallet.name if from_wallet else f"#{task.from_wallet_id}"
-        to_name = to_wallet.name if to_wallet else f"#{task.to_wallet_id}"
-        lines.append(f"{index}) {from_name} -> {to_name}: {task.amount:.2f}")
-    return "\n".join(lines)
+
+def build_task_detail_text(task_id: int) -> str:
+    wallet_map = database.get_wallet_map()
+    task = database.get_transfer_task(task_id)
+    if task is None:
+        return "🧾 Задача не найдена."
+
+    from_wallet = wallet_map.get(task.from_wallet_id)
+    to_wallet = wallet_map.get(task.to_wallet_id)
+    from_name = from_wallet.name if from_wallet else f"#{task.from_wallet_id}"
+    to_name = to_wallet.name if to_wallet else f"#{task.to_wallet_id}"
+    return (
+        "🧾 Задача по переводу\n"
+        f"ID: {task.id}\n"
+        f"Откуда: {from_name}\n"
+        f"Куда: {to_name}\n"
+        f"Сумма: {task.amount:.2f}\n"
+        f"Статус: {task.status}\n"
+        f"Создана: {task.created_at}"
+    )
 
 
 def build_today_report_text() -> str:
     totals = database.get_day_totals()
-    legal_tax_lines = []
-    for index, item in enumerate(totals["legal_taxes_items"], start=1):
-        legal_tax_lines.append(f"{index}) {item['taxes_amount']:.2f}")
+    gross_income_total = round(database.income_transactions.total_for_date(totals["date"]), 2)
+    legal_tax_lines = [f"{index}) {item['taxes_amount']:.2f}" for index, item in enumerate(totals["legal_taxes_items"], start=1)]
     legal_taxes_text = "\n".join(legal_tax_lines) if legal_tax_lines else "нет"
 
     return (
         f"📅 Отчет за {totals['date']}\n"
-        f"💰 Доходы: {totals['income_total']:.2f}\n"
+        f"💰 Доходы: {gross_income_total:.2f}\n"
         f"👨‍🏫 Учителям: {totals['teachers_total']:.2f}\n"
         f"🧾 Налоги от физ. лиц: {totals['physical_taxes_total']:.2f}\n"
         f"🏢 Налоги от юр. лиц:\n{legal_taxes_text}\n"
@@ -105,10 +114,10 @@ def build_fixes_report_text() -> str:
 
     lines = ["📌 Фиксированные:"]
     for index, item in enumerate(fixes, start=1):
-        missing = round(item.summ_fix - item.summ_now, 2)
+        percent = 100.0 if item.summ_fix == 0 else max(0.0, (item.summ_now / item.summ_fix) * 100)
+        due_date = database.get_next_fix_due_date(item.date_day).strftime("%d.%m")
         lines.append(
-            f"{index}) {item.name}: {item.summ_now:.2f}/{item.summ_fix:.2f} | "
-            f"не хватает {missing:.2f} | до {item.date_day} числа"
+            f"{index}) {item.name}: {item.summ_now:.0f}/{item.summ_fix:.0f} | {percent:.0f}% | {due_date}"
         )
     return "\n".join(lines)
 
@@ -121,9 +130,7 @@ def build_needen_report_text() -> str:
     lines = ["🔁 Постоянные:"]
     for index, item in enumerate(items, start=1):
         percent = 0.0 if item.summ_need == 0 else (item.summ_now / item.summ_need) * 100
-        lines.append(
-            f"{index}) {item.name}: {item.summ_now:.2f}/{item.summ_need:.2f} | {percent:.2f}%"
-        )
+        lines.append(f"{index}) {item.name}: {item.summ_now:.2f}/{item.summ_need:.2f} | {percent:.2f}%")
     return "\n".join(lines)
 
 
@@ -141,3 +148,4 @@ def build_reports_transfers_text() -> str:
         to_name = to_wallet.name if to_wallet else f"#{task.to_wallet_id}"
         lines.append(f"{index}) {from_name} -> {to_name}: {task.amount:.2f}")
     return "\n".join(lines)
+

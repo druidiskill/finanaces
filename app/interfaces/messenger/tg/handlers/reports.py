@@ -2,9 +2,9 @@ from aiogram import F, Router
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery
 
-from bot_app.filters import AllowedUserFilter
-from bot_app.keyboards import reports_menu_keyboard
-from bot_app.utils import (
+from app.interfaces.messenger.tg.filters import AllowedUserFilter
+from app.interfaces.messenger.tg.keyboards import reports_menu_keyboard
+from app.interfaces.messenger.tg.utils import (
     build_fixes_report_text,
     build_needen_report_text,
     build_reports_transfers_text,
@@ -70,3 +70,4 @@ async def reports_transfers_handler(callback: CallbackQuery) -> None:
         reply_markup=reports_menu_keyboard(),
     )
     await callback.answer()
+

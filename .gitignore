@@ -4,4 +4,4 @@ google.json
 scripts/
 *__pycache__/
 *.pyc
-*.dbS
+*.db

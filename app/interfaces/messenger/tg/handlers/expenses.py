@@ -3,8 +3,8 @@ from aiogram.filters.state import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot_app.filters import AllowedUserFilter
-from bot_app.keyboards import (
+from app.interfaces.messenger.tg.filters import AllowedUserFilter
+from app.interfaces.messenger.tg.keyboards import (
     expense_categories_keyboard,
     expense_confirmation_keyboard,
     expense_wallet_keyboard,
@@ -12,9 +12,9 @@ from bot_app.keyboards import (
     main_menu_keyboard,
     single_action_keyboard,
 )
-from bot_app.services import database
-from bot_app.states import ExpenseStates
-from bot_app.utils import build_financial_overview_text
+from app.interfaces.messenger.tg.services import database
+from app.interfaces.messenger.tg.states import ExpenseStates
+from app.interfaces.messenger.tg.utils import build_financial_overview_text
 
 
 SECTION_LABELS = {
@@ -151,3 +151,4 @@ async def expense_cancel_handler(callback: CallbackQuery, state: FSMContext) -> 
         reply_markup=main_menu_keyboard(),
     )
     await callback.answer()
+

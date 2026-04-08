@@ -1,6 +1,6 @@
 from aiogram import Router
 
-from bot_app.handlers import admin, expenses, income, reports, start, tasks
+from app.interfaces.messenger.tg.handlers import admin, expenses, income, reports, start, tasks
 
 
 def setup_routers() -> Router:

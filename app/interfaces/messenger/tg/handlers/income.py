@@ -5,9 +5,9 @@ from aiogram.filters.state import StateFilter
 from aiogram.fsm.context import FSMContext
 from aiogram.types import CallbackQuery, Message
 
-from bot_app.constants import INCOME_DESTINATION_LABELS, INCOME_TAX_LABELS
-from bot_app.filters import AllowedUserFilter
-from bot_app.keyboards import (
+from app.interfaces.messenger.tg.constants import INCOME_DESTINATION_LABELS, INCOME_TAX_LABELS
+from app.interfaces.messenger.tg.filters import AllowedUserFilter
+from app.interfaces.messenger.tg.keyboards import (
     confirmation_keyboard,
     destination_keyboard,
     income_menu_keyboard,
@@ -17,9 +17,9 @@ from bot_app.keyboards import (
     taxable_source_keyboard,
     wallet_keyboard,
 )
-from bot_app.services import database
-from bot_app.states import IncomeStates
-from bot_app.utils import build_financial_overview_text, format_distribution_preview
+from app.interfaces.messenger.tg.services import database
+from app.interfaces.messenger.tg.states import IncomeStates
+from app.interfaces.messenger.tg.utils import build_financial_overview_text, format_distribution_preview
 
 
 router = Router(name="income")
@@ -316,3 +316,4 @@ async def income_cancel_handler(callback: CallbackQuery, state: FSMContext) -> N
         reply_markup=main_menu_keyboard(),
     )
     await callback.answer()
+
